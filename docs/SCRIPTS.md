@@ -495,8 +495,12 @@ Diagnostic only. Reads the keyword section of an evaluation report and a CV, and
 npm run keyword-match -- reports/001-acme.md
 npm run keyword-match -- reports/001-acme.md --cv output/cv.html
 npm run keyword-match -- reports/001-acme.md --json
+npm run keyword-match -- --jd-text jds/acme-devops.md
+npm run keyword-match -- --keywords jds/acme-devops.keywords.txt --cv output/cv.html
 npm run keyword-match -- --self-test
 ```
+
+`--keywords <file>` takes a keyword list you already have, for example one copied from an external ATS-analysis site: one keyword per line, or separated by commas or semicolons. Every entry is kept as written, in any language; `--jd-text` instead keeps only names from the skill vocabulary. A walkthrough in Portuguese is in `docs/CV_POR_VAGA.md`.
 
 ---
 

@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<!-- career-ops-template
+name: Classico PT-BR
+version: 1.0.0
+-->
+<html lang="{{LANG}}">
+<head>
+<meta charset="UTF-8">
+<title>{{NAME}} — CV</title>
+<style>
+  /* ── Classico PT-BR ───────────────────────────────────────────────────────
+     A one-column, sans-serif CV in the layout common to Brazilian infra/DevOps
+     resumes:
+
+       - large coloured name, a bold "Objetivo" line, then the contact line
+       - coloured uppercase section titles over a thin rule
+       - each job: the ROLE first (bold), then "Company | dates | location"
+       - skills as "Category: items" lines, languages as a closing one-liner
+
+     The role-first look is CSS only (flex `order`): the DOM keeps the shared
+     company → period → role order every other template uses, so the text an
+     ATS extracts is unchanged.
+
+     ATS discipline matches templates/cv-template.html: a static system font
+     stack, ligatures disabled, no letter-spacing or small caps on headings. */
+
+  :root {
+    --accent-color: #155e5a;
+    --muted-color: #555f66;
+    --rule-color: #b9cfcd;
+    --font-family: "Liberation Sans", "DejaVu Sans", Arial, Helvetica, 'Arial Unicode MS', sans-serif;
+    --font-size: 11px;
+    /* Must match generate-pdf.mjs's PDF_PAGE_MARGIN. */
+    --page-margin: 0.6in;
+    --job-break-inside: auto;
+    --project-break-inside: auto;
+  }
+  @page { margin: var(--page-margin); }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-variant-ligatures: none;
+    font-feature-settings: "liga" 0, "clig" 0, "dlig" 0;
+  }
+
+  html {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body {
+    font-family: var(--font-family);
+    font-size: var(--font-size);
+    line-height: 1.45;
+    color: #1f2a30;
+    background: #ffffff;
+  }
+
+  .page {
+    max-width: {{PAGE_WIDTH}};
+    margin: 0 auto;
+    background: #ffffff;
+  }
+
+  /* === PHOTO (opt-in, #264) === */
+  .cv-photo {
+    float: right;
+    width: 78px;
+    height: 78px;
+    object-fit: cover;
+    margin: 0 0 6px 12px;
+  }
+  .cv-photo.rounded { border-radius: 4px; }
+  .cv-photo.circle  { border-radius: 50%; }
+  .cv-photo.square  { border-radius: 0; }
+
+  /* === HEADER === */
+  .header { margin-bottom: 12px; }
+
+  .header h1 {
+    font-size: 27px;
+    font-weight: 700;
+    color: var(--accent-color);
+    line-height: 1.1;
+    margin-bottom: 6px;
+  }
+
+  .header-title {
+    font-size: 11px;
+    font-weight: 700;
+    margin-bottom: 5px;
+    line-height: 1.3;
+  }
+
+  .contact-row {
+    font-size: 9.5px;
+    line-height: 1.5;
+    color: var(--muted-color);
+  }
+
+  .contact-row a {
+    color: var(--muted-color);
+    text-decoration: none;
+  }
+
+  .contact-row > * { white-space: nowrap; }
+
+  .contact-row > *:not(:last-child)::after {
+    content: "\00a0|";
+    margin-inline: 2px;
+  }
+
+  /* === SECTIONS === */
+  .section { margin-bottom: 11px; }
+
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent-color);
+    text-transform: uppercase;
+    border-bottom: 0.8px solid var(--rule-color);
+    padding-bottom: 2px;
+    margin-bottom: 6px;
+  }
+
+  .summary-text { text-align: left; }
+
+  /* === COMPETENCIES (optional) === */
+  .competencies-grid { line-height: 1.55; }
+  .competency-tag { display: inline; white-space: nowrap; }
+  .competency-tag::after { content: "  \2022  "; }
+  .competency-tag:last-child::after { content: ""; }
+
+  /* === WORK EXPERIENCE ===
+     Visual order: role / company | period | location / bullets. */
+  .job {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    margin-bottom: 8px;
+  }
+  .job:last-child { margin-bottom: 0; }
+
+  .job-header { display: contents; }
+
+  .job-role {
+    order: 1;
+    flex: 0 0 100%;
+    font-size: 11.5px;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+
+  .job-company {
+    order: 2;
+    font-size: 9.5px;
+    font-weight: 700;
+    color: var(--muted-color);
+  }
+
+  .job-period,
+  .job-location {
+    font-size: 9.5px;
+    color: var(--muted-color);
+    white-space: nowrap;
+  }
+  .job-period { order: 3; }
+  .job-location { order: 4; }
+
+  .job-period::before,
+  .job-location::before {
+    content: "\00a0|\00a0";
+  }
+
+  .job-context {
+    order: 5;
+    flex: 0 0 100%;
+    font-style: italic;
+    font-size: 9.5px;
+    color: var(--muted-color);
+    margin-top: 2px;
+  }
+
+  .job ul {
+    order: 6;
+    flex: 0 0 100%;
+    margin-top: 3px;
+    padding-left: 14px;
+    list-style: none;
+  }
+
+  .job li {
+    position: relative;
+    margin-bottom: 2px;
+  }
+  .job li::marker { content: ""; }
+  .job li::before {
+    content: "\2022";
+    color: var(--accent-color);
+    display: inline-block;
+    width: 12px;
+    margin-left: -12px;
+  }
+
+  /* === PROJECTS === */
+  .project { margin-bottom: 5px; }
+  .project-title { font-weight: 700; }
+  .project-badge {
+    font-size: 9.5px;
+    font-weight: 400;
+    color: var(--muted-color);
+    margin-left: 5px;
+  }
+  .project-desc { margin-top: 1px; }
+  .project-tech { font-size: 9.5px; color: var(--muted-color); margin-top: 1px; }
+
+  /* === EDUCATION === */
+  .edu-item { margin-bottom: 5px; }
+
+  .edu-header { display: block; }
+  .edu-title { font-weight: 700; }
+  .edu-org { font-weight: 400; }
+  .edu-org::before { content: "|\00a0"; }
+  .edu-year,
+  .edu-location {
+    display: block;
+    font-size: 9.5px;
+    color: var(--muted-color);
+  }
+  .edu-desc { font-size: 9.5px; color: var(--muted-color); }
+
+  /* === CERTIFICATIONS / AWARDS === */
+  .cert-table,
+  .award-table { display: block; }
+  .cert-item { margin-bottom: 2px; }
+  .cert-title { font-weight: 700; }
+  .cert-org::before { content: "\00a0|\00a0"; }
+  .cert-year { color: var(--muted-color); }
+  .cert-year::before { content: "\00a0|\00a0"; }
+
+  /* === SKILLS === */
+  .skills-grid { display: block; }
+  .skill-item { margin-bottom: 1px; }
+  .skill-category { font-weight: 700; }
+
+  /* === LANGUAGES (the "interests" slot, titled Idiomas) === */
+  .interests-line { line-height: 1.5; }
+
+  /* === GDPR / RODO CONSENT (footer, opt-in) === */
+  .cv-consent {
+    margin-top: 14px;
+    padding-top: 8px;
+    border-top: 1px solid #ddd;
+    font-size: 8.5px;
+    line-height: 1.4;
+    color: #777;
+  }
+  .cv-consent:empty { display: none; }
+
+  /* === PAGE BREAK CONTROL === */
+  .header,
+  .edu-item,
+  .cert-item,
+  .skill-item {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .job {
+    page-break-inside: var(--job-break-inside, auto);
+    break-inside: var(--job-break-inside, auto);
+  }
+  .project {
+    page-break-inside: var(--project-break-inside, auto);
+    break-inside: var(--project-break-inside, auto);
+  }
+  /* Keep a project's tech line attached to its description. */
+  .project-tech {
+    break-before: avoid;
+    page-break-before: avoid;
+  }
+
+  .section-title,
+  .job-role,
+  .job-company,
+  .project-title {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  {{PHOTO}}
+  <!-- HEADER -->
+  <div class="header">
+    <h1>{{NAME}}</h1>
+    {{TITLE_BLOCK}}
+    <div class="contact-row">
+      <span>{{LOCATION}}</span>
+      <a href="tel:{{PHONE}}">{{PHONE}}</a>
+      <a href="mailto:{{EMAIL}}">{{EMAIL}}</a>
+      <a href="{{LINKEDIN_URL}}">{{LINKEDIN_DISPLAY}}</a>
+      <a href="{{PORTFOLIO_URL}}">{{PORTFOLIO_DISPLAY}}</a>
+    </div>
+  </div>
+
+  <!-- PROFESSIONAL SUMMARY -->
+  <div class="section">
+    <div class="section-title">{{SECTION_SUMMARY}}</div>
+    <div class="summary-text">{{SUMMARY_TEXT}}</div>
+  </div>
+
+  <!-- CORE COMPETENCIES -->
+  <div class="section">
+    <div class="section-title">{{SECTION_COMPETENCIES}}</div>
+    <div class="competencies-grid">
+      {{COMPETENCIES}}
+    </div>
+  </div>
+
+  <!-- WORK EXPERIENCE -->
+  <div class="section">
+    <div class="section-title">{{SECTION_EXPERIENCE}}</div>
+    {{EXPERIENCE}}
+  </div>
+
+  <!-- SKILLS -->
+  <div class="section">
+    <div class="section-title">{{SECTION_SKILLS}}</div>
+    {{SKILLS}}
+  </div>
+
+  <!-- PROJECTS -->
+  <div class="section">
+    <div class="section-title">{{SECTION_PROJECTS}}</div>
+    {{PROJECTS}}
+  </div>
+
+  <!-- EDUCATION -->
+  <div class="section">
+    <div class="section-title">{{SECTION_EDUCATION}}</div>
+    {{EDUCATION}}
+  </div>
+
+  <!-- CERTIFICATIONS -->
+  <div class="section">
+    <div class="section-title">{{SECTION_CERTIFICATIONS}}</div>
+    <div class="cert-table">{{CERTIFICATIONS}}</div>
+  </div>
+
+  <!-- AWARDS -->
+  <div class="section">
+    <div class="section-title">{{SECTION_AWARDS}}</div>
+    <div class="award-table">{{AWARDS}}</div>
+  </div>
+
+  <!-- INTERESTS -->
+  <div class="section">
+    <div class="section-title">{{SECTION_INTERESTS}}</div>
+    <div class="interests-line">{{INTERESTS}}</div>
+  </div>
+
+  <!-- END -->
+
+  <!-- GDPR / RODO consent -->
+  <div class="cv-consent">{{CONSENT}}</div>
+
+</div>
+</body>
+</html>
