@@ -85,6 +85,7 @@ const TEMPLATES = [
   { file: 'templates/cv-template.executive.html', format: 'html', after: '<!-- END -->', hasCertifications: true, hasCompetencies: true, hasInterests: false },
   { file: 'templates/cv-template.jake.html', format: 'html', after: '<!-- END -->', hasCertifications: true, hasCompetencies: true, hasInterests: false },
   { file: 'templates/cv-template.leadership.html', format: 'html', after: '<!-- END -->', hasCertifications: true, hasCompetencies: true, hasInterests: false },
+  { file: 'templates/cv-template.classico-ptbr.html', format: 'html', after: '<!-- END -->', hasCertifications: true, hasCompetencies: true, hasInterests: true },
   { file: 'templates/cv-template.modern.html', format: 'html', after: '<!-- END -->', hasCertifications: true, hasCompetencies: true, hasInterests: false },
   { file: 'templates/cv-template.tex', format: 'tex', after: '%%%%  END  %%%%', hasCertifications: false, hasCompetencies: false, hasInterests: false },
   { file: 'templates/cv-template.cjk.tex', format: 'tex', after: '%%%%  END  %%%%', hasCertifications: false, hasCompetencies: false, hasInterests: false },
@@ -369,10 +370,24 @@ for (const { file, format, after, hasCertifications, hasCompetencies, hasInteres
   // `after` IS the sentinel literal — reuse it rather than restating it here,
   // so the two can never drift into a weaker substring of each other.
   const noSentinel = template.replace(after, '');
+  const skillsAt = template.indexOf(skillsMarker);
+  const skillsLast = format !== 'html'
+    || !/<!--\s+(?!END\s*-->)[A-Z][A-Z ]*-->/.test(template.slice(skillsAt + skillsMarker.length));
   check(`${name}: fixture actually dropped the sentinel`, noSentinel.includes(after), false);
   const strippedNoSentinel = stripEmptySections(noSentinel, { ...FULL, skills: [] }, format);
-  check(`${name}: no sentinel + empty skills leaves the template untouched (fail-safe)`,
-    strippedNoSentinel === noSentinel, true);
+  // The fail-safe premise is that Skills is the LAST marked section, so the END
+  // sentinel is its only right-hand boundary. A template that places Skills
+  // mid-document (classico-ptbr puts it right after Experience) is bounded by
+  // the next section's marker instead, so dropping END cannot disable the strip;
+  // there, assert the strip removed Skills and nothing after it.
+  if (skillsLast) {
+    check(`${name}: no sentinel + empty skills leaves the template untouched (fail-safe)`,
+      strippedNoSentinel === noSentinel, true);
+  } else {
+    check(`${name}: mid-document skills, no END sentinel: empty skills removes only the skills block`,
+      !strippedNoSentinel.includes(skillsMarker) && strippedNoSentinel.includes(projectsMarker)
+        && strippedNoSentinel.includes(educationMarker), true);
+  }
   check(`${name}: no sentinel + empty skills keeps the closing document skeleton`,
     strippedNoSentinel.trimEnd().endsWith(closingSkeleton), true);
   check(`${name}: no sentinel + empty skills keeps {{EXPERIENCE}}`,

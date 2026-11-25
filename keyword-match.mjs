@@ -18,10 +18,14 @@
  *      node keyword-match.mjs <report-file> --json        (structured JSON)
  *      node keyword-match.mjs --url <posting-url> [--cv path] [--json]
  *      node keyword-match.mjs --jd-text <file> [--cv path] [--json]
+ *      node keyword-match.mjs --keywords <file> [--cv path] [--json]
+ *                                                        (a keyword list you already have,
+ *                                                         e.g. copied from an external ATS
+ *                                                         tool; one per line or comma-separated)
  *      node keyword-match.mjs --self-test                 (built-in assertions)
  *      node keyword-match.mjs --help                      (this list, exit 0)
  *
- * Exactly one JD source per run: a report path, --url, or --jd-text. URL fetch
+ * Exactly one JD source per run: a report path, --url, --jd-text, or --keywords. URL fetch
  * uses fetchJdViaKnownApi only (no browser). Thin / unreachable / zero-skill
  * bodies refuse to score (stderr + exit 1, no coverage on stdout).
  */
@@ -647,10 +651,10 @@ const TEXT_CAP = 20_000;
 const TIMEOUT_MS = 15_000;
 
 const USAGE =
-  'Usage: node keyword-match.mjs <report-file> | --url <posting-url> | --jd-text <file> [--cv <path>] [--json]';
+  'Usage: node keyword-match.mjs <report-file> | --url <posting-url> | --jd-text <file> | --keywords <file> [--cv <path>] [--json]';
 
 const MIXED_SOURCES =
-  'use exactly one of <report>, --url, --jd-text';
+  'use exactly one of <report>, --url, --jd-text, --keywords';
 
 const REFUSE_BETTER_SOURCE =
   'Provide a better link, or pass --jd-text <file> with the pasted description.';
@@ -658,11 +662,12 @@ const REFUSE_BETTER_SOURCE =
 /**
  * @typedef {{ kind: 'report', reportPath: string }
  *   | { kind: 'url', url: string }
- *   | { kind: 'jd-text', textPath: string }} MatchInput
+ *   | { kind: 'jd-text', textPath: string }
+ *   | { kind: 'keywords', listPath: string }} MatchInput
  */
 
 /**
- * @typedef {'report' | 'archived-jd' | 'url' | 'jd-text'} KeywordSource
+ * @typedef {'report' | 'archived-jd' | 'url' | 'jd-text' | 'keyword-list'} KeywordSource
  */
 
 /**
@@ -686,6 +691,30 @@ const REFUSE_BETTER_SOURCE =
  */
 export function keywordsFromJdText(jdText) {
   return [...extractSkills(jdText)].sort();
+}
+
+/**
+ * Parse a plain keyword list: one per line, or separated by commas, semicolons,
+ * bullets or tabs. Leading list markers ("-", "*", "1.") are dropped and the
+ * list is de-duplicated case-insensitively, keeping first-seen order. Every
+ * entry is kept as written: unlike keywordsFromJdText there is no vocabulary
+ * filter, so terms in any language survive.
+ *
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function keywordsFromList(text) {
+  const seen = new Set();
+  const out = [];
+  for (const raw of String(text || '').split(/[\r\n,;\t•·]+/)) {
+    const kw = raw.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '').trim();
+    if (!kw || kw.startsWith('#')) continue;
+    const key = kw.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(kw);
+  }
+  return out;
 }
 
 /**
@@ -812,6 +841,7 @@ export function parseMatchArgs(argv) {
   let reportPath = null;
   let url = null;
   let jdTextPath = null;
+  let listPath = null;
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -843,12 +873,19 @@ export function parseMatchArgs(argv) {
       i = got.next;
       continue;
     }
+    if (a === '--keywords' || a.startsWith('--keywords=')) {
+      const got = takeFlagValue('--keywords', argv, i);
+      if (listPath !== null) throw new Error(MIXED_SOURCES);
+      listPath = got.value;
+      i = got.next;
+      continue;
+    }
     if (a.startsWith('--')) throw new Error(`Unknown option: ${a}`);
     if (reportPath !== null) throw new Error(`Unexpected argument: ${a}`);
     reportPath = a;
   }
 
-  const sourceCount = [reportPath, url, jdTextPath].filter((v) => v != null).length;
+  const sourceCount = [reportPath, url, jdTextPath, listPath].filter((v) => v != null).length;
   if (!selfTest) {
     if (sourceCount > 1) throw new Error(MIXED_SOURCES);
     if (sourceCount === 0) throw new Error(USAGE);
@@ -859,6 +896,7 @@ export function parseMatchArgs(argv) {
   if (reportPath != null) input = { kind: 'report', reportPath };
   else if (url != null) input = { kind: 'url', url };
   else if (jdTextPath != null) input = { kind: 'jd-text', textPath: jdTextPath };
+  else if (listPath != null) input = { kind: 'keywords', listPath };
 
   return { input, cvPath, jsonMode, selfTest };
 }
@@ -921,6 +959,24 @@ export async function resolveKeywords(input, root) {
       keywordSource: 'jd-text',
       keywordNote:
         `Keywords: ${keywords.length} taken from pasted JD text (skill vocabulary).`,
+    };
+  }
+
+  if (input.kind === 'keywords') {
+    const listPath = resolveUserPath(input.listPath, root);
+    if (!existsSync(listPath) || !statSync(listPath).isFile()) {
+      console.error(`Keyword list not found: ${listPath}`);
+      process.exit(1);
+    }
+    const keywords = keywordsFromList(readFileSync(listPath, 'utf-8'));
+    if (!keywords.length) {
+      console.error(`No keywords in ${listPath}. Write one per line, or separate them with commas.`);
+      process.exit(1);
+    }
+    return {
+      keywords,
+      keywordSource: 'keyword-list',
+      keywordNote: `Keywords: ${keywords.length} taken from the list in ${basename(listPath)}.`,
     };
   }
 
@@ -1006,6 +1062,21 @@ function runSelfTest() {
   if (JSON.stringify(fromJd) !== JSON.stringify([...fromJd].sort())) {
     failures.push('keywordsFromJdText must sort');
   }
+
+  const fromList = keywordsFromList('- Kubernetes\n1. Zabbix, ITIL; kubernetes\n# comment\n\nMonitoramento de redes');
+  if (JSON.stringify(fromList) !== JSON.stringify(['Kubernetes', 'Zabbix', 'ITIL', 'Monitoramento de redes'])) {
+    failures.push(`keywordsFromList parse (${JSON.stringify(fromList)})`);
+  }
+  try {
+    const parsed = parseMatchArgs(['--keywords', 'kw.txt']);
+    if (parsed.input?.kind !== 'keywords') failures.push('parseMatchArgs --keywords kind');
+  } catch {
+    failures.push('parseMatchArgs must accept --keywords');
+  }
+  try {
+    parseMatchArgs(['--keywords', 'kw.txt', '--jd-text', 'jd.txt']);
+    failures.push('parseMatchArgs must reject --keywords with --jd-text');
+  } catch { /* expected */ }
 
   const thinGate = gateUrlJdResult(
     'https://example.com/jobs/1',
